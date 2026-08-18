@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v4</title>
+    <title>企業線上考勤打卡系統 v5</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
@@ -36,10 +36,10 @@
         .mode-option { flex: 1; text-align: center; padding: 8px; border: 1px solid #ced4da; border-radius: 6px; cursor: pointer; background: #f8f9fa; font-weight: 500; }
         .mode-option.selected { background: #e7f1ff; border-color: #007bff; color: #007bff; font-weight: bold; }
 
-        /* 表單與表格 */
+        /* 表單與雙欄佈局 */
         .form-group { margin-bottom: 15px; }
-        .date-range-group { display: flex; gap: 10px; }
-        .date-range-group > div { flex: 1; }
+        .form-row { display: flex; gap: 15px; }
+        .form-row > div { flex: 1; }
         label { display: block; margin-bottom: 5px; font-weight: 500; }
         input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; }
         input:readonly { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
@@ -49,9 +49,11 @@
         th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eef2f5; font-size: 0.85rem; }
         th { background: #f8f9fa; color: #6c757d; }
         
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; display: inline-block; margin-right: 4px; }
         .badge-info { background: #d1ecf1; color: #0c5460; }
         .badge-primary { background: #cce5ff; color: #004085; }
+        .badge-office { background: #e2e3e5; color: #383d41; }
+        .badge-project { background: #fff3cd; color: #856404; }
         
         .btn-action { color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
         .btn-proxy { background: #17a2b8; }
@@ -92,7 +94,7 @@
             <div class="gps-status" id="gps-info">📍 點擊按鈕自動獲取 GPS 位置打卡</div>
         </div>
 
-        <!-- 線上請假申請 (支援單日自訂時數與跨日天數自動計算) -->
+        <!-- 線上請假申請 (新增：辦公室與專案標籤) -->
         <div class="card">
             <h2>線上請假申請</h2>
             
@@ -104,23 +106,45 @@
             </div>
 
             <form onsubmit="submitLeave(event)">
-                <div class="form-group">
-                    <label>假別</label>
-                    <select id="leave-type">
-                        <option value="特休">特休</option>
-                        <option value="事假">事假</option>
-                        <option value="病假">病假</option>
-                    </select>
+                <!-- 辦公室與專案選擇雙欄區域 -->
+                <div class="form-row form-group">
+                    <div>
+                        <label>所屬辦公室</label>
+                        <select id="leave-office" required>
+                            <option value="">-- 請選擇辦公室 --</option>
+                            <option value="台北辦公室">台北辦公室</option>
+                            <option value="台中辦公室">台中辦公室</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>專案標籤</label>
+                        <select id="leave-project" required>
+                            <option value="">-- 請選擇專案 --</option>
+                            <option value="強韌案">強韌案</option>
+                            <option value="T-CERT案">T-CERT案</option>
+                            <option value="協作案">協作案</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>職務代理人</label>
-                    <select id="leave-proxy" required>
-                        <option value="">-- 請選擇同仁作為職務代理人 --</option>
-                        <option value="李大同 (工程部)">李大同 (工程部)</option>
-                        <option value="王美玲 (設計部)">王美玲 (設計部)</option>
-                        <option value="陳立威 (專案部)">陳立威 (專案部)</option>
-                    </select>
+                <div class="form-row form-group">
+                    <div>
+                        <label>假別</label>
+                        <select id="leave-type">
+                            <option value="特休">特休</option>
+                            <option value="事假">事假</option>
+                            <option value="病假">病假</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>職務代理人</label>
+                        <select id="leave-proxy" required>
+                            <option value="">-- 請選擇代理人 --</option>
+                            <option value="李大同 (工程部)">李大同 (工程部)</option>
+                            <option value="王美玲 (設計部)">王美玲 (設計部)</option>
+                            <option value="陳立威 (專案部)">陳立威 (專案部)</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- 單日模式：單一日期選擇 -->
@@ -130,7 +154,7 @@
                 </div>
 
                 <!-- 跨日模式：日期區間選擇 -->
-                <div class="form-group date-range-group" id="multi-date-box" style="display: none;">
+                <div class="form-row form-group" id="multi-date-box" style="display: none;">
                     <div>
                         <label>開始日期</label>
                         <input type="date" id="leave-start-date" onchange="calculateMultiDays()">
@@ -141,7 +165,7 @@
                     </div>
                 </div>
 
-                <!-- 請假時數：動態調整輸入與自動鎖定狀態 -->
+                <!-- 請假時數 -->
                 <div class="form-group">
                     <label id="hours-label">請假時數 (小時)</label>
                     <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="請輸入請假小時數" required>
@@ -166,6 +190,7 @@
                 <thead>
                     <tr>
                         <th>申請人</th>
+                        <th>辦公室 / 專案</th>
                         <th>假別</th>
                         <th>日期 / 區間</th>
                         <th>時數</th>
@@ -186,6 +211,7 @@
                 <thead>
                     <tr>
                         <th>申請人</th>
+                        <th>辦公室 / 專案</th>
                         <th>代理人</th>
                         <th>假別</th>
                         <th>日期 / 區間</th>
@@ -207,13 +233,13 @@
 </div>
 
 <script>
-    let currentLeaveMode = 'single'; // 預設單日模式
+    let currentLeaveMode = 'single';
     let annualLeaveHours = parseFloat(localStorage.getItem('annualLeaveHours')) || 60;
     let attendanceLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [
         { name: "張小明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "18:05:22", status: "正常", location: "台北市信義區" }
     ];
     let leaveRequests = JSON.parse(localStorage.getItem('leaveRequests')) || [
-        { id: 1, name: "張小明", proxy: "李大同 (工程部)", type: "特休", dateStr: "2026-08-20", hours: 4, reason: "下午專案請假", status: "待代理人確認" }
+        { id: 1, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (工程部)", type: "特休", dateStr: "2026-08-20", hours: 4, reason: "下午專案請假", status: "待代理人確認" }
     ];
 
     function updateLeaveDisplay() {
@@ -229,7 +255,6 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 切換 單日 / 跨日 請假模式
     function setLeaveMode(mode) {
         currentLeaveMode = mode;
         const singleBtn = document.getElementById('mode-single');
@@ -245,7 +270,6 @@
             singleBox.style.display = 'block';
             multiBox.style.display = 'none';
             
-            // 解鎖小時輸入框
             hoursInput.readOnly = false;
             hoursInput.value = '';
             hoursInput.placeholder = "請輸入請假小時數 (例如 2 或 4)";
@@ -256,7 +280,6 @@
             singleBox.style.display = 'none';
             multiBox.style.display = 'flex';
             
-            // 鎖定小時輸入框
             hoursInput.readOnly = true;
             hoursInput.placeholder = "選擇起訖日期後自動計算";
             hoursHint.style.display = 'block';
@@ -264,7 +287,6 @@
         }
     }
 
-    // 計算跨日天數與時數 (天數 x 8小時)
     function calculateMultiDays() {
         if (currentLeaveMode !== 'multi') return;
         const startVal = document.getElementById('leave-start-date').value;
@@ -282,12 +304,9 @@
                 return;
             }
 
-            // 計算天數 (包含頭尾天)
             const diffTime = Math.abs(endDate - startDate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            const calculatedHours = diffDays * 8; // 一天 8 小時
-
-            hoursInput.value = calculatedHours;
+            hoursInput.value = diffDays * 8;
         } else {
             hoursInput.value = '';
         }
@@ -313,7 +332,6 @@
         }
     }
 
-    // 打卡處理
     function handleClock(type) {
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0];
@@ -333,9 +351,10 @@
         localStorage.setItem('attendanceLogs', JSON.stringify(attendanceLogs));
     }
 
-    // 提交請假
     function submitLeave(e) {
         e.preventDefault();
+        const office = document.getElementById('leave-office').value;
+        const project = document.getElementById('leave-project').value;
         const type = document.getElementById('leave-type').value;
         const proxy = document.getElementById('leave-proxy').value;
         const hours = parseFloat(document.getElementById('leave-hours').value);
@@ -361,6 +380,8 @@
         leaveRequests.push({
             id: Date.now(),
             name: "張小明",
+            office: office,
+            project: project,
             proxy: proxy,
             type: type,
             dateStr: dateStr,
@@ -375,14 +396,13 @@
         if (currentLeaveMode === 'single') setLeaveMode('single');
     }
 
-    // 代理人畫面渲染
     function renderProxyLeaves() {
         const tbody = document.getElementById('proxy-leave-list');
         tbody.innerHTML = '';
         const list = leaveRequests.filter(item => item.status === "待代理人確認");
 
         if(list.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">目前沒有需要您確認代理的假單</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#999;">目前沒有需要您確認代理的假單</td></tr>';
             return;
         }
 
@@ -390,6 +410,10 @@
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
+                    <td>
+                        <span class="badge badge-office">${item.office || '未設置'}</span>
+                        <span class="badge badge-project">${item.project || '未設置'}</span>
+                    </td>
                     <td><span class="badge badge-info">${item.type}</span></td>
                     <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
@@ -410,14 +434,13 @@
         }
     }
 
-    // 主管畫面渲染
     function renderManagerLeaves() {
         const tbody = document.getElementById('pending-leave-list');
         tbody.innerHTML = '';
         const list = leaveRequests.filter(item => item.status === "待主管審核");
 
         if(list.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#999;">目前沒有待審核假單 (需經代理人同意後才會顯示於此)</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">目前沒有待審核假單 (需經代理人同意後才會顯示於此)</td></tr>';
             return;
         }
 
@@ -425,6 +448,10 @@
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
+                    <td>
+                        <span class="badge badge-office">${item.office || '未設置'}</span>
+                        <span class="badge badge-project">${item.project || '未設置'}</span>
+                    </td>
                     <td><span class="badge badge-primary">${item.proxy}</span></td>
                     <td><span class="badge badge-info">${item.type}</span></td>
                     <td>${item.dateStr}</td>
@@ -451,7 +478,6 @@
         }
     }
 
-    // 下載 Excel
     function exportExcel() {
         const data = attendanceLogs.map(item => ({
             "員工姓名": item.name,
