@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v6</title>
+    <title>企業線上考勤打卡系統 v7</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
@@ -122,6 +122,10 @@
                             <option value="強韌案">強韌案</option>
                             <option value="T-CERT案">T-CERT案</option>
                             <option value="協作案">協作案</option>
+                            <!-- 台中辦公室專屬案別 -->
+                            <option value="輻災案">輻災案 (台中)</option>
+                            <option value="水文化案">水文化案 (台中)</option>
+                            <option value="再造案">再造案 (台中)</option>
                         </select>
                     </div>
                 </div>
@@ -229,14 +233,17 @@
 </div>
 
 <script>
-    // 預設同仁資料庫 (包含辦公室與專案)
+    // 預設同仁資料庫 (包含台北與台中專案)
     const staffDatabase = [
         { name: "李大同", office: "台北辦公室", project: "T-CERT案" },
         { name: "王美玲", office: "台北辦公室", project: "強韌案" },
         { name: "林志豪", office: "台北辦公室", project: "協作案" },
         { name: "陳立威", office: "台中辦公室", project: "T-CERT案" },
         { name: "黃雅婷", office: "台中辦公室", project: "強韌案" },
-        { name: "張家豪", office: "台中辦公室", project: "協作案" }
+        { name: "張家豪", office: "台中辦公室", project: "協作案" },
+        { name: "許明哲", office: "台中辦公室", project: "輻災案" },
+        { name: "郭姿婷", office: "台中辦公室", project: "水文化案" },
+        { name: "蔡宗翰", office: "台中辦公室", project: "再造案" }
     ];
 
     let currentLeaveMode = 'single';
