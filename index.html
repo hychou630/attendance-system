@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v2</title>
+    <title>企業線上考勤打卡系統 v3</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; }
+        .container { max-width: 850px; margin: 0 auto; }
         .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         h2 { font-size: 1.2rem; margin-bottom: 15px; color: #1a252f; border-bottom: 2px solid #eef2f5; padding-bottom: 8px; }
         
         /* 角色切換器 */
-        .role-switcher { display: flex; gap: 10px; margin-bottom: 20px; }
-        .role-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; background: #e0e6ed; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .role-switcher { display: flex; gap: 8px; margin-bottom: 20px; }
+        .role-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; background: #e0e6ed; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.9rem; }
         .role-btn.active { background: #007bff; color: white; }
 
         /* 員工個人資訊卡 */
@@ -38,52 +38,55 @@
         .btn-submit { background: #007bff; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eef2f5; font-size: 0.9rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eef2f5; font-size: 0.85rem; }
         th { background: #f8f9fa; color: #6c757d; }
         
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
-        .badge-success { background: #d4edda; color: #155724; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; }
         .badge-warning { background: #fff3cd; color: #856404; }
         .badge-info { background: #d1ecf1; color: #0c5460; }
-        .btn-approve { background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .badge-primary { background: #cce5ff; color: #004085; }
+        .badge-success { background: #d4edda; color: #155724; }
+        
+        .btn-action { color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
+        .btn-proxy { background: #17a2b8; }
+        .btn-approve { background: #28a745; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
 <div class="container">
-    <!-- 視角切換器 -->
+    <!-- 三視角切換器 -->
     <div class="role-switcher">
-        <button class="role-btn active" onclick="switchRole('employee')">員工視角 (打卡與請假)</button>
-        <button class="role-btn" onclick="switchRole('manager')">主管/HR 視角 (審核與報表)</button>
+        <button class="role-btn active" onclick="switchRole('employee')">1. 申請人視角 (打卡/請假)</button>
+        <button class="role-btn" onclick="switchRole('proxy')">2. 職務代理人視角 (確認)</button>
+        <button class="role-btn" onclick="switchRole('manager')">3. 主管/HR 視角 (核准/報表)</button>
     </div>
 
-    <!-- ================= 員工視角 ================= -->
+    <!-- ================= 1. 申請人視角 ================= -->
     <div id="employee-view">
-        <!-- 新增需求 2：特休剩餘天數資訊卡 -->
+        <!-- 特休小時數資訊卡 -->
         <div class="user-info-bar">
             <div>
-                <strong>目前同仁：</strong><span id="user-name">張小明</span>
+                <strong>目前同仁：</strong><span>張小明</span>
             </div>
             <div>
-                🌴 剩餘特休：<span class="leave-badge" id="annual-leave-days">7.5</span> 天
+                🌴 剩餘特休：<span class="leave-badge" id="annual-leave-hours">60</span> 小時
             </div>
         </div>
 
-        <!-- 新增需求 1：支援上班/下班打卡功能區 -->
+        <!-- 打卡區域 -->
         <div class="card clock-box">
             <div class="time-display" id="clock">00:00:00</div>
             <div class="date-display" id="date-str">載入中...</div>
-            
             <div class="clock-buttons">
                 <button class="btn-clock btn-clock-in" onclick="handleClock('上班')">上班打卡</button>
                 <button class="btn-clock btn-clock-out" onclick="handleClock('下班')">下班打卡</button>
             </div>
-            
             <div class="gps-status" id="gps-info">📍 點擊按鈕自動獲取 GPS 位置打卡</div>
         </div>
 
-        <!-- 線上請假申請 -->
+        <!-- 線上請假申請 (含代理人與小時單位) -->
         <div class="card">
             <h2>線上請假申請</h2>
             <form onsubmit="submitLeave(event)">
@@ -96,34 +99,65 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label>職務代理人</label>
+                    <select id="leave-proxy" required>
+                        <option value="">-- 請選擇同仁作為職務代理人 --</option>
+                        <option value="李大同 (工程部)">李大同 (工程部)</option>
+                        <option value="王美玲 (設計部)">王美玲 (設計部)</option>
+                        <option value="陳立威 (專案部)">陳立威 (專案部)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>請假日期</label>
                     <input type="date" id="leave-date" required>
                 </div>
                 <div class="form-group">
-                    <label>請假天數</label>
-                    <input type="number" id="leave-days" step="0.5" min="0.5" value="1" required>
+                    <label>請假時數 (小時)</label>
+                    <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="例如: 2 或 4" required>
                 </div>
                 <div class="form-group">
-                    <label>請假原因</label>
-                    <textarea id="leave-reason" rows="2" placeholder="請輸入事由" required></textarea>
+                    <label>請假事由 / 交辦工作</label>
+                    <textarea id="leave-reason" rows="2" placeholder="請註明請假事由及交付代理人的事項" required></textarea>
                 </div>
-                <button type="submit" class="btn-submit">送出請假單</button>
+                <button type="submit" class="btn-submit">送出假單 (通知代理人)</button>
             </form>
         </div>
     </div>
 
-    <!-- ================= 主管/HR 視角 ================= -->
-    <div id="manager-view" style="display: none;">
+    <!-- ================= 2. 職務代理人視角 ================= -->
+    <div id="proxy-view" style="display: none;">
         <div class="card">
-            <h2>待審核假單 (核准後自動扣除特休天數)</h2>
+            <h2>待確認的代理請求</h2>
+            <p style="color: #6c757d; font-size: 0.85rem; margin-bottom: 10px;">同仁指定你為代理人，請確認工作交辦事項後點擊同意，假單才會送交主管審核。</p>
             <table>
                 <thead>
                     <tr>
                         <th>申請人</th>
                         <th>假別</th>
                         <th>日期</th>
-                        <th>天數</th>
-                        <th>原因</th>
+                        <th>時數</th>
+                        <th>交辦事項</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="proxy-leave-list"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ================= 3. 主管/HR 視角 ================= -->
+    <div id="manager-view" style="display: none;">
+        <div class="card">
+            <h2>待審核假單 (代理人已同意)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>申請人</th>
+                        <th>代理人</th>
+                        <th>假別</th>
+                        <th>日期</th>
+                        <th>時數</th>
+                        <th>事由</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -133,199 +167,199 @@
 
         <div class="card">
             <h2>月底考勤報表管理</h2>
-            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動匯出包含「上班時間」與「下班時間」的完整 Excel 表格。</p>
+            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動匯出含代理人資訊與打卡時數的 Excel 表格。</p>
             <button class="btn-submit" style="background: #28a745;" onclick="exportExcel()">下載本月 Excel 考勤報表 📊</button>
         </div>
     </div>
 </div>
 
 <script>
-    // 初始化本地資料
-    let annualLeave = parseFloat(localStorage.getItem('annualLeave')) || 7.5;
+    // 初始化特休時數 (原 7.5 天 = 60 小時)
+    let annualLeaveHours = parseFloat(localStorage.getItem('annualLeaveHours')) || 60;
     let attendanceLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [
-        { name: "王大明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "18:05:22", status: "正常", location: "台北市信義區 (GPS鎖定)" }
+        { name: "張小明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "18:05:22", status: "正常", location: "台北市信義區" }
     ];
     let leaveRequests = JSON.parse(localStorage.getItem('leaveRequests')) || [
-        { id: 1, name: "張小明", type: "特休", date: "2026-08-20", days: 1, reason: "個人事宜", status: "待審核" }
+        { id: 1, name: "張小明", proxy: "李大同 (工程部)", type: "特休", date: "2026-08-20", hours: 4, reason: "下午專案請假", status: "待代理人確認" }
     ];
 
-    // 更新特休顯示
     function updateLeaveDisplay() {
-        document.getElementById('annual-leave-days').innerText = annualLeave;
+        document.getElementById('annual-leave-hours').innerText = annualLeaveHours;
     }
     updateLeaveDisplay();
 
-    // 更新即時時鐘
     function updateClock() {
         const now = new Date();
         document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
-        document.getElementById('date-str').innerText = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 (班別：09:00 - 18:00)`;
+        document.getElementById('date-str').innerText = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 (固定班)`;
     }
     setInterval(updateClock, 1000);
     updateClock();
 
     function switchRole(role) {
         document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('employee-view').style.display = 'none';
+        document.getElementById('proxy-view').style.display = 'none';
+        document.getElementById('manager-view').style.display = 'none';
+
         if (role === 'employee') {
             document.querySelectorAll('.role-btn')[0].classList.add('active');
             document.getElementById('employee-view').style.display = 'block';
-            document.getElementById('manager-view').style.display = 'none';
-        } else {
+        } else if (role === 'proxy') {
             document.querySelectorAll('.role-btn')[1].classList.add('active');
-            document.getElementById('employee-view').style.display = 'none';
-            document.getElementById('manager-view').style.display = 'block';
-            renderPendingLeaves();
-        }
-    }
-
-    // 處理 上班/下班 打卡
-    function handleClock(type) {
-        const gpsElement = document.getElementById('gps-info');
-        gpsElement.innerText = `正在讀取 GPS 位置進行【${type}打卡】...`;
-
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => saveClockRecord(type, `經緯: ${pos.coords.latitude.toFixed(3)}, ${pos.coords.longitude.toFixed(3)}`),
-                () => saveClockRecord(type, "公司半徑範圍內 (GPS定點)")
-            );
+            document.getElementById('proxy-view').style.display = 'block';
+            renderProxyLeaves();
         } else {
-            saveClockRecord(type, "公司半徑範圍內 (GPS定點)");
+            document.querySelectorAll('.role-btn')[2].classList.add('active');
+            document.getElementById('manager-view').style.display = 'block';
+            renderManagerLeaves();
         }
     }
 
-    function saveClockRecord(type, locationText) {
+    // 打卡處理
+    function handleClock(type) {
         const now = new Date();
         const timeStr = now.toTimeString().split(' ')[0];
         const dateStr = now.toISOString().split('T')[0];
-
-        // 尋找今天是否已經有打卡紀錄
         let todayRecord = attendanceLogs.find(r => r.date === dateStr && r.name === "張小明");
 
         if (type === '上班') {
             const isLate = (now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0));
-            const statusStr = isLate ? "遲到" : "正常";
-
             if (todayRecord) {
                 todayRecord.clockIn = timeStr;
-                todayRecord.status = statusStr;
             } else {
-                attendanceLogs.push({
-                    name: "張小明",
-                    date: dateStr,
-                    clockIn: timeStr,
-                    clockOut: "--:--:--",
-                    status: statusStr,
-                    location: locationText
-                });
+                attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: timeStr, clockOut: "--:--:--", status: isLate ? "遲到" : "正常", location: "公司範圍" });
             }
-            alert(`✅ 上班打卡成功！\n時間：${timeStr}\n狀態：${isLate ? "遲到" : "正常"}`);
+            alert(`✅ 上班打卡成功！時間：${timeStr}`);
         } else {
-            // 下班打卡
-            if (todayRecord) {
-                todayRecord.clockOut = timeStr;
-            } else {
-                attendanceLogs.push({
-                    name: "張小明",
-                    date: dateStr,
-                    clockIn: "--:--:--",
-                    clockOut: timeStr,
-                    status: "未打上班卡",
-                    location: locationText
-                });
-            }
-            alert(`✅ 下班打卡成功！\n時間：${timeStr}`);
+            if (todayRecord) { todayRecord.clockOut = timeStr; } 
+            else { attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: "--:--:--", clockOut: timeStr, status: "未打上班卡", location: "公司範圍" }); }
+            alert(`✅ 下班打卡成功！時間：${timeStr}`);
         }
-
         localStorage.setItem('attendanceLogs', JSON.stringify(attendanceLogs));
-        document.getElementById('gps-info').innerText = `最近打卡紀錄：【${type}】${timeStr} | ${locationText}`;
     }
 
-    // 提交請假
+    // 提交請假 (設為 待代理人確認)
     function submitLeave(e) {
         e.preventDefault();
         const type = document.getElementById('leave-type').value;
+        const proxy = document.getElementById('leave-proxy').value;
         const date = document.getElementById('leave-date').value;
-        const days = parseFloat(document.getElementById('leave-days').value);
+        const hours = parseFloat(document.getElementById('leave-hours').value);
         const reason = document.getElementById('leave-reason').value;
 
-        if (type === '特休' && days > annualLeave) {
-            alert(`請假失敗！剩餘特休不足（目前僅剩 ${annualLeave} 天）`);
+        if (type === '特休' && hours > annualLeaveHours) {
+            alert(`請假失敗！剩餘特休時數不足（目前僅剩 ${annualLeaveHours} 小時）`);
             return;
         }
 
         leaveRequests.push({
             id: Date.now(),
             name: "張小明",
+            proxy: proxy,
             type: type,
             date: date,
-            days: days,
+            hours: hours,
             reason: reason,
-            status: "待審核"
+            status: "待代理人確認"
         });
 
         localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-        alert('假單已送出，等待主管審核！');
+        alert('假單已送出！系統已通知職務代理人進行同意確認。');
         e.target.reset();
     }
 
-    // 主管端渲染
-    function renderPendingLeaves() {
-        const tbody = document.getElementById('pending-leave-list');
+    // 代理人畫面渲染
+    function renderProxyLeaves() {
+        const tbody = document.getElementById('proxy-leave-list');
         tbody.innerHTML = '';
-        const pendingList = leaveRequests.filter(item => item.status === "待審核");
+        const list = leaveRequests.filter(item => item.status === "待代理人確認");
 
-        if(pendingList.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">目前沒有待審核的請假申請</td></tr>';
+        if(list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">目前沒有需要您確認代理的假單</td></tr>';
             return;
         }
 
-        pendingList.forEach(item => {
+        list.forEach(item => {
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
                     <td><span class="badge badge-info">${item.type}</span></td>
                     <td>${item.date}</td>
-                    <td>${item.days} 天</td>
+                    <td><b>${item.hours}</b> 小時</td>
                     <td>${item.reason}</td>
-                    <td><button class="btn-approve" onclick="approveLeave(${item.id})">核准</button></td>
+                    <td><button class="btn-action btn-proxy" onclick="proxyAgree(${item.id})">同意擔任代理人</button></td>
                 </tr>
             `;
         });
     }
 
-    // 主管核准假單並扣除特休
-    function approveLeave(id) {
-        const targetLeave = leaveRequests.find(item => item.id === id);
-        if (targetLeave) {
-            targetLeave.status = "已核准";
-            
-            // 若為特休則自動扣天數
-            if (targetLeave.type === '特休') {
-                annualLeave = Math.max(0, annualLeave - targetLeave.days);
-                localStorage.setItem('annualLeave', annualLeave);
-                updateLeaveDisplay();
-            }
-
+    // 代理人點擊同意 ➔ 狀態改為 待主管審核
+    function proxyAgree(id) {
+        const item = leaveRequests.find(r => r.id === id);
+        if (item) {
+            item.status = "待主管審核";
             localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-            alert(`假單已核准！${targetLeave.type === '特休' ? '特休已自動扣除 ' + targetLeave.days + ' 天' : ''}`);
-            renderPendingLeaves();
+            alert('已同意代理！假單已轉交至主管進行最終審核。');
+            renderProxyLeaves();
         }
     }
 
-    // 匯出包含上下班紀錄的 Excel
+    // 主管畫面渲染 (只顯示代理人已同意的單)
+    function renderManagerLeaves() {
+        const tbody = document.getElementById('pending-leave-list');
+        tbody.innerHTML = '';
+        const list = leaveRequests.filter(item => item.status === "待主管審核");
+
+        if(list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#999;">目前沒有待審核假單 (需經代理人同意後才會顯示於此)</td></tr>';
+            return;
+        }
+
+        list.forEach(item => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.name}</td>
+                    <td><span class="badge badge-primary">${item.proxy}</span></td>
+                    <td><span class="badge badge-info">${item.type}</span></td>
+                    <td>${item.date}</td>
+                    <td><b>${item.hours}</b> 小時</td>
+                    <td>${item.reason}</td>
+                    <td><button class="btn-action btn-approve" onclick="approveLeave(${item.id})">最終核准</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    // 主管核准 ➔ 自動扣除特休時數
+    function approveLeave(id) {
+        const item = leaveRequests.find(r => r.id === id);
+        if (item) {
+            item.status = "已核准";
+            if (item.type === '特休') {
+                annualLeaveHours = Math.max(0, annualLeaveHours - item.hours);
+                localStorage.setItem('annualLeaveHours', annualLeaveHours);
+                updateLeaveDisplay();
+            }
+            localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
+            alert(`假單已正式核准！${item.type === '特休' ? '特休已自動扣除 ' + item.hours + ' 小時' : ''}`);
+            renderManagerLeaves();
+        }
+    }
+
+    // 下載 Excel
     function exportExcel() {
         const data = attendanceLogs.map(item => ({
             "員工姓名": item.name,
             "打卡日期": item.date,
-            "上班打卡時間": item.clockIn,
-            "下班打卡時間": item.clockOut,
+            "上班打卡": item.clockIn,
+            "下班打卡": item.clockOut,
             "出勤狀態": item.status,
             "定位資訊": item.location
         }));
-
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "本月出勤統計");
+        XLSX.utils.book_append_sheet(workbook, worksheet, "考勤統計");
         XLSX.writeFile(workbook, `考勤月報表_${new Date().toISOString().split('T')[0]}.xlsx`);
     }
 </script>
