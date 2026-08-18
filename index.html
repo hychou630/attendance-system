@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v9</title>
+    <title>企業線上考勤打卡系統 v10</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
@@ -137,7 +137,7 @@
                 <div class="form-row form-group">
                     <div>
                         <label>假別 / 勤怠類別</label>
-                        <select id="leave-type" onchange="toggleTripLocation()">
+                        <select id="leave-type" onchange="handleTypeChange()">
                             <option value="特休">特休</option>
                             <option value="公假">公假</option>
                             <option value="出差">出差 (免辦公室定位打卡)</option>
@@ -177,8 +177,8 @@
                     </div>
                 </div>
 
-                <!-- 請假/出差時數 -->
-                <div class="form-group">
+                <!-- 請假/出差時數（選擇「出差」時自動隱藏與免填） -->
+                <div class="form-group" id="hours-box">
                     <label id="hours-label">申請時數 (小時)</label>
                     <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="請輸入小時數" required>
                     <small id="hours-hint" style="color: #6c757d; font-size: 0.8rem; display: none;">🔒 跨日申請已依選取天數（每天 8 小時）自動算好並鎖定。</small>
@@ -306,19 +306,25 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 切換出差地點輸入框之顯示狀態
-    function toggleTripLocation() {
+    // 假別切換：連動顯示地點欄位與隱藏時數欄位
+    function handleTypeChange() {
         const type = document.getElementById('leave-type').value;
         const tripBox = document.getElementById('trip-location-box');
         const tripInput = document.getElementById('trip-location');
+        const hoursBox = document.getElementById('hours-box');
+        const hoursInput = document.getElementById('leave-hours');
 
         if (type === '出差') {
             tripBox.style.display = 'block';
             tripInput.required = true;
+            hoursBox.style.display = 'none';
+            hoursInput.required = false;
         } else {
             tripBox.style.display = 'none';
             tripInput.required = false;
             tripInput.value = '';
+            hoursBox.style.display = 'block';
+            hoursInput.required = true;
         }
     }
 
@@ -472,7 +478,7 @@
         const type = document.getElementById('leave-type').value;
         const proxy = document.getElementById('leave-proxy').value;
         const tripLocation = document.getElementById('trip-location').value;
-        const hours = parseFloat(document.getElementById('leave-hours').value);
+        let hours = 8; // 出差預設以一天 8 小時計算
         const reason = document.getElementById('leave-reason').value;
         let dateStr = "";
 
@@ -480,11 +486,23 @@
             const singleDate = document.getElementById('leave-single-date').value;
             if (!singleDate) { alert("請選擇申請日期！"); return; }
             dateStr = singleDate;
+            if (type !== '出差') {
+                hours = parseFloat(document.getElementById('leave-hours').value);
+            }
         } else {
             const startVal = document.getElementById('leave-start-date').value;
             const endVal = document.getElementById('leave-end-date').value;
             if (!startVal || !endVal) { alert("請選擇申請的起訖日期！"); return; }
             dateStr = startVal === endVal ? startVal : `${startVal} 至 ${endVal}`;
+            if (type !== '出差') {
+                hours = parseFloat(document.getElementById('leave-hours').value);
+            } else {
+                const startDate = new Date(startVal);
+                const endDate = new Date(endVal);
+                const diffTime = Math.abs(endDate - startDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                hours = diffDays * 8;
+            }
         }
 
         if (type === '特休' && hours > annualLeaveHours) {
@@ -509,7 +527,7 @@
         localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
         alert('單據已送出！系統已通知職務代理人進行確認。');
         e.target.reset();
-        toggleTripLocation();
+        handleTypeChange();
         updateProjectOptions();
         if (currentLeaveMode === 'single') setLeaveMode('single');
     }
@@ -527,7 +545,8 @@
         list.forEach(item => {
             const typeBadge = item.type === '出差' ? 'badge-trip' : 'badge-info';
             const detailText = item.type === '出差' ? `📍 <b>${item.location}</b><br><small style="color:#666;">${item.reason}</small>` : item.reason;
-            
+            const hoursDisplay = item.type === '出差' ? '整天' : `<b>${item.hours}</b> 小時`;
+
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
@@ -538,7 +557,7 @@
                     <td><span class="badge ${typeBadge}">${item.type}</span></td>
                     <td>${detailText}</td>
                     <td>${item.dateStr}</td>
-                    <td><b>${item.hours}</b> 小時</td>
+                    <td>${hoursDisplay}</td>
                     <td><button class="btn-action btn-proxy" onclick="proxyAgree(${item.id})">同意擔任代理人</button></td>
                 </tr>
             `;
@@ -602,6 +621,7 @@
         list.forEach(item => {
             const typeBadge = item.type === '出差' ? 'badge-trip' : 'badge-info';
             const detailText = item.type === '出差' ? `📍 <b>${item.location}</b><br><small style="color:#666;">${item.reason}</small>` : item.reason;
+            const hoursDisplay = item.type === '出差' ? '整天' : `<b>${item.hours}</b> 小時`;
 
             tbody.innerHTML += `
                 <tr>
@@ -614,7 +634,7 @@
                     <td><span class="badge ${typeBadge}">${item.type}</span></td>
                     <td>${detailText}</td>
                     <td>${item.dateStr}</td>
-                    <td><b>${item.hours}</b> 小時</td>
+                    <td>${hoursDisplay}</td>
                     <td><button class="btn-action btn-approve" onclick="approveLeave(${item.id})">最終核准</button></td>
                 </tr>
             `;
