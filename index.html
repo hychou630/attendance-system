@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企業簡易線上考勤打卡系統</title>
+    <!-- 引入樣式與 Excel 導出庫 -->
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #f4f6f9; color: #333; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h2 { font-size: 1.2rem; margin-bottom: 15px; color: #1a252f; border-bottom: 2px solid #eef2f5; padding-bottom: 8px; }
+        
+        /* 角色切換器 */
+        .role-switcher { display: flex; gap: 10px; margin-bottom: 20px; }
+        .role-btn { flex: 1; padding: 12px; border: none; border-radius: 8px; background: #e0e6ed; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .role-btn.active { background: #007bff; color: white; }
+
+        /* 打卡區域 */
+        .clock-box { text-align: center; padding: 20px 0; }
+        .time-display { font-size: 2.5rem; font-weight: bold; color: #2c3e50; margin-bottom: 5px; }
+        .date-display { color: #7f8c8d; margin-bottom: 15px; }
+        .btn-clock { width: 160px; height: 160px; border-radius: 50%; border: none; background: #28a745; color: white; font-size: 1.5rem; font-weight: bold; cursor: pointer; box-shadow: 0 6px 16px rgba(40,167,69,0.3); transition: transform 0.1s; }
+        .btn-clock:active { transform: scale(0.95); }
+        .gps-status { margin-top: 15px; font-size: 0.9rem; color: #17a2b8; }
+
+        /* 表單與表格 */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; }
+        .btn-submit { background: #007bff; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eef2f5; font-size: 0.9rem; }
+        th { background: #f8f9fa; color: #6c757d; }
+        
+        /* 狀態標籤 */
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-info { background: #d1ecf1; color: #0c5460; }
+        .btn-approve { background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+    </style>
+    <!-- 引入 Excel 匯出軟體套件 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <!-- 1. 視角切換器 -->
+    <div class="role-switcher">
+        <button class="role-btn active" onclick="switchRole('employee')">員工視角 (打卡與請假)</button>
+        <button class="role-btn" onclick="switchRole('manager')">主管/HR 視角 (審核與報表)</button>
+    </div>
+
+    <!-- ================= 員工視角 ================= -->
+    <div id="employee-view">
+        <!-- 打卡功能區 -->
+        <div class="card clock-box">
+            <div class="time-display" id="clock">00:00:00</div>
+            <div class="date-display" id="date-str">載入中...</div>
+            <button class="btn-clock" onclick="doClockIn()">上班打卡</button>
+            <div class="gps-status" id="gps-info">📍 系統準備取得 GPS 定位中...</div>
+        </div>
+
+        <!-- 線上請假申請 -->
+        <div class="card">
+            <h2>線上請假申請</h2>
+            <form onsubmit="submitLeave(event)">
+                <div class="form-group">
+                    <label>假別</label>
+                    <select id="leave-type">
+                        <option value="特休">特休</option>
+                        <option value="事假">事假</option>
+                        <option value="病假">病假</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>請假日期</label>
+                    <input type="date" id="leave-date" required>
+                </div>
+                <div class="form-group">
+                    <label>請假原因</label>
+                    <textarea id="leave-reason" rows="2" placeholder="請輸入事由" required></textarea>
+                </div>
+                <button type="submit" class="btn-submit">送出請假單</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= 主管/HR 視角 ================= -->
+    <div id="manager-view" style="display: none;">
+        <!-- 待審核請假單 -->
+        <div class="card">
+            <h2>待審核假單 (單層主管關卡)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>申請人</th>
+                        <th>假別</th>
+                        <th>日期</th>
+                        <th>原因</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="pending-leave-list">
+                    <!-- 動態寫入假單資料 -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 底月報表匯出 -->
+        <div class="card">
+            <h2>月底考勤報表管理</h2>
+            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動結算員工遲到次數、請假時數與出勤明細。</p>
+            <button class="btn-submit" style="background: #28a745;" onclick="exportExcel()">下載本月 Excel 考勤報表 📊</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 預設資料庫（儲存在本地瀏覽器內）
+    let attendanceLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [
+        { name: "王大明", date: "2026-08-17", time: "08:52:10", status: "正常", location: "台北市信義區 (GPS鎖定)" },
+        { name: "陳小華", date: "2026-08-17", time: "09:14:05", status: "遲到", location: "台北市信義區 (GPS鎖定)" }
+    ];
+
+    let leaveRequests = JSON.parse(localStorage.getItem('leaveRequests')) || [
+        { id: 1, name: "林小美", type: "特休", date: "2026-08-20", reason: "個人家庭事宜", status: "待審核" }
+    ];
+
+    // 更新即時時鐘
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
+        document.getElementById('date-str').innerText = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 (班別：09:00 - 18:00 固定班)`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 切換員工與主管視角
+    function switchRole(role) {
+        document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+        if (role === 'employee') {
+            document.querySelectorAll('.role-btn')[0].classList.add('active');
+            document.getElementById('employee-view').style.display = 'block';
+            document.getElementById('manager-view').style.display = 'none';
+        } else {
+            document.querySelectorAll('.role-btn')[1].classList.add('active');
+            document.getElementById('employee-view').style.display = 'none';
+            document.getElementById('manager-view').style.display = 'block';
+            renderPendingLeaves();
+        }
+    }
+
+    // 進行 GPS 定位打卡
+    function doClockIn() {
+        const gpsElement = document.getElementById('gps-info');
+        gpsElement.innerText = "正在讀取 GPS 定位...";
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude.toFixed(4);
+                    const lng = position.coords.longitude.toFixed(4);
+                    saveClockIn(`經緯度: ${lat}, ${lng}`);
+                },
+                () => {
+                    // 若獲取位置失敗，模擬預設公司 GPS 定位
+                    saveClockIn("台北市信義區公司範圍內 (模擬GPS)");
+                }
+            );
+        } else {
+            saveClockIn("台北市信義區公司範圍內 (模擬GPS)");
+        }
+    }
+
+    function saveClockIn(locationText) {
+        const now = new Date();
+        const timeStr = now.toTimeString().split(' ')[0];
+        const dateStr = now.toISOString().split('T')[0];
+        
+        // 判斷是否遲到 (超過 09:00)
+        const isLate = (now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0));
+        const statusStr = isLate ? "遲到" : "正常";
+
+        const newLog = {
+            name: "目前員工 (你)",
+            date: dateStr,
+            time: timeStr,
+            status: statusStr,
+            location: locationText
+        };
+
+        attendanceLogs.push(newLog);
+        localStorage.setItem('attendanceLogs', JSON.stringify(attendanceLogs));
+
+        document.getElementById('gps-info').innerText = `✅ 打卡成功！時間：${timeStr} (${statusStr}) | 定位：${locationText}`;
+        alert(`打卡成功！\n時間：${timeStr}\n狀態：${statusStr}`);
+    }
+
+    // 送出請假申請
+    function submitLeave(e) {
+        e.preventDefault();
+        const type = document.getElementById('leave-type').value;
+        const date = document.getElementById('leave-date').value;
+        const reason = document.getElementById('leave-reason').value;
+
+        leaveRequests.push({
+            id: Date.now(),
+            name: "目前員工 (你)",
+            type: type,
+            date: date,
+            reason: reason,
+            status: "待審核"
+        });
+
+        localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
+        alert('請假單已成功送出，等待主管審核！');
+        e.target.reset();
+    }
+
+    // 渲染主管待審核清單
+    function renderPendingLeaves() {
+        const tbody = document.getElementById('pending-leave-list');
+        tbody.innerHTML = '';
+        
+        const pendingList = leaveRequests.filter(item => item.status === "待審核");
+        
+        if(pendingList.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#999;">目前沒有待審核的請假申請</td></tr>';
+            return;
+        }
+
+        pendingList.forEach(item => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.name}</td>
+                    <td><span class="badge badge-info">${item.type}</span></td>
+                    <td>${item.date}</td>
+                    <td>${item.reason}</td>
+                    <td><button class="btn-approve" onclick="approveLeave(${item.id})">同意核准</button></td>
+                </tr>
+            `;
+        });
+    }
+
+    // 主管審核同意
+    function approveLeave(id) {
+        leaveRequests = leaveRequests.map(item => item.id === id ? {...item, status: "已核准"} : item);
+        localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
+        alert('假單已核准！');
+        renderPendingLeaves();
+    }
+
+    // 下載 Excel 月報表
+    function exportExcel() {
+        const data = attendanceLogs.map(item => ({
+            "員工姓名": item.name,
+            "打卡日期": item.date,
+            "打卡時間": item.time,
+            "出勤狀態": item.status,
+            "GPS 定位資訊": item.location
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "本月考勤紀錄");
+        
+        XLSX.writeFile(workbook, `公司考勤月報表_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+</script>
+
+</body>
+</html>
