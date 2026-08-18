@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v8</title>
+    <title>企業線上考勤打卡系統 v9</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
@@ -137,7 +137,7 @@
                 <div class="form-row form-group">
                     <div>
                         <label>假別 / 勤怠類別</label>
-                        <select id="leave-type">
+                        <select id="leave-type" onchange="toggleTripLocation()">
                             <option value="特休">特休</option>
                             <option value="公假">公假</option>
                             <option value="出差">出差 (免辦公室定位打卡)</option>
@@ -151,6 +151,12 @@
                             <option value="">-- 請先選擇辦公室與專案 --</option>
                         </select>
                     </div>
+                </div>
+
+                <!-- 出差地點回報（選擇「出差」時自動展開） -->
+                <div class="form-group" id="trip-location-box" style="display: none; background: #f0f7ff; padding: 12px; border-radius: 8px; border-left: 4px solid #007bff;">
+                    <label style="color: #0056b3;">📍 出差地點 / 前往單位</label>
+                    <input type="text" id="trip-location" placeholder="例如：台中辦公室 / 宜蘭縣政府消防局 / 國家地震中心">
                 </div>
 
                 <!-- 單日模式：單一日期選擇 -->
@@ -179,8 +185,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label>事由 / 地點 / 交辦事項</label>
-                    <textarea id="leave-reason" rows="2" placeholder="請註明申請事由、出差地點及交付代理人的事項" required></textarea>
+                    <label>事由 / 交付代理人事項</label>
+                    <textarea id="leave-reason" rows="2" placeholder="請註明申請事由及交付代理人的工作事項" required></textarea>
                 </div>
                 <button type="submit" class="btn-submit">送出申請 (通知代理人)</button>
             </form>
@@ -198,9 +204,9 @@
                         <th>申請人</th>
                         <th>辦公室 / 專案</th>
                         <th>假別/勤怠</th>
+                        <th>地點/事由</th>
                         <th>日期 / 區間</th>
                         <th>時數</th>
-                        <th>事由/地點</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -224,9 +230,9 @@
                         <th>辦公室 / 專案</th>
                         <th>代理人</th>
                         <th>假別/勤怠</th>
+                        <th>地點/事由</th>
                         <th>日期 / 區間</th>
                         <th>時數</th>
-                        <th>事由</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -236,7 +242,7 @@
 
         <div class="card">
             <h2>月底考勤與出差報表管理</h2>
-            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動匯出含公假、出差註記、代理人資訊與打卡時數的 Excel 表格。</p>
+            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動匯出含公假、出差地點、代理人資訊與打卡時數的 Excel 表格。</p>
             <button class="btn-submit" style="background: #28a745;" onclick="exportExcel()">下載本月 Excel 考勤報表 📊</button>
         </div>
     </div>
@@ -265,18 +271,18 @@
     let currentLeaveMode = 'single';
     let annualLeaveHours = parseFloat(localStorage.getItem('annualLeaveHours')) || 60;
     
-    // 預設打卡記錄 (包含加班範例)
+    // 預設打卡記錄
     let attendanceLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [
         { name: "張小明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "21:05:22", status: "正常", overtimeHours: 3, location: "台北市信義區" },
         { name: "張小明", date: "2026-08-18", clockIn: "08:50:00", clockOut: "22:15:00", status: "正常", overtimeHours: 4, location: "台北市信義區" },
         { name: "張小明", date: "2026-08-19", clockIn: "08:55:00", clockOut: "22:30:00", status: "正常", overtimeHours: 4, location: "台北市信義區" }
     ];
 
-    // 預設假單記錄 (包含出差、公假範例)
+    // 預設假單記錄 (包含出差地點範例)
     let leaveRequests = JSON.parse(localStorage.getItem('leaveRequests')) || [
-        { id: 1, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "出差", dateStr: "2026-08-20", hours: 8, reason: "前往台中辦公室現場輔導訪視", status: "已核准" },
-        { id: 2, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "特休", dateStr: "2026-08-21", hours: 8, reason: "個人事宜", status: "已核准" },
-        { id: 3, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "公假", dateStr: "2026-08-24", hours: 8, reason: "參加消防署防災共識營", status: "待代理人確認" }
+        { id: 1, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "出差", location: "台中辦公室", dateStr: "2026-08-20", hours: 8, reason: "進行現場輔導訪視交流", status: "已核准" },
+        { id: 2, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "特休", location: "", dateStr: "2026-08-21", hours: 8, reason: "個人事宜", status: "已核准" },
+        { id: 3, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "公假", location: "", dateStr: "2026-08-24", hours: 8, reason: "參加消防署防災共識營", status: "待代理人確認" }
     ];
 
     function updateLeaveDisplay() {
@@ -299,6 +305,22 @@
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    // 切換出差地點輸入框之顯示狀態
+    function toggleTripLocation() {
+        const type = document.getElementById('leave-type').value;
+        const tripBox = document.getElementById('trip-location-box');
+        const tripInput = document.getElementById('trip-location');
+
+        if (type === '出差') {
+            tripBox.style.display = 'block';
+            tripInput.required = true;
+        } else {
+            tripBox.style.display = 'none';
+            tripInput.required = false;
+            tripInput.value = '';
+        }
+    }
 
     // 辦公室切換時連動專案選單
     function updateProjectOptions() {
@@ -449,6 +471,7 @@
         const project = document.getElementById('leave-project').value;
         const type = document.getElementById('leave-type').value;
         const proxy = document.getElementById('leave-proxy').value;
+        const tripLocation = document.getElementById('trip-location').value;
         const hours = parseFloat(document.getElementById('leave-hours').value);
         const reason = document.getElementById('leave-reason').value;
         let dateStr = "";
@@ -476,6 +499,7 @@
             project: project,
             proxy: proxy,
             type: type,
+            location: tripLocation,
             dateStr: dateStr,
             hours: hours,
             reason: reason,
@@ -485,6 +509,7 @@
         localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
         alert('單據已送出！系統已通知職務代理人進行確認。');
         e.target.reset();
+        toggleTripLocation();
         updateProjectOptions();
         if (currentLeaveMode === 'single') setLeaveMode('single');
     }
@@ -501,6 +526,8 @@
 
         list.forEach(item => {
             const typeBadge = item.type === '出差' ? 'badge-trip' : 'badge-info';
+            const detailText = item.type === '出差' ? `📍 <b>${item.location}</b><br><small style="color:#666;">${item.reason}</small>` : item.reason;
+            
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
@@ -509,9 +536,9 @@
                         <span class="badge badge-project">${item.project || '未設置'}</span>
                     </td>
                     <td><span class="badge ${typeBadge}">${item.type}</span></td>
+                    <td>${detailText}</td>
                     <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
-                    <td>${item.reason}</td>
                     <td><button class="btn-action btn-proxy" onclick="proxyAgree(${item.id})">同意擔任代理人</button></td>
                 </tr>
             `;
@@ -532,7 +559,6 @@
         const alertContainer = document.getElementById('weekly-alert-container');
         alertContainer.innerHTML = '';
 
-        // 計算每週請假時數與加班時數 (以張小明為範例)
         let totalLeaveHours = 0;
         let totalOvertimeHours = 0;
 
@@ -546,7 +572,6 @@
 
         const leaveDays = totalLeaveHours / 8;
 
-        // 預警條件：每週請假超過 3 天 (24小時)
         if (leaveDays > 3) {
             alertContainer.innerHTML += `
                 <div class="alert-card alert-card-danger">
@@ -555,7 +580,6 @@
             `;
         }
 
-        // 預警條件：每週加班超過 10 小時
         if (totalOvertimeHours > 10) {
             alertContainer.innerHTML += `
                 <div class="alert-card">
@@ -577,6 +601,8 @@
 
         list.forEach(item => {
             const typeBadge = item.type === '出差' ? 'badge-trip' : 'badge-info';
+            const detailText = item.type === '出差' ? `📍 <b>${item.location}</b><br><small style="color:#666;">${item.reason}</small>` : item.reason;
+
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
@@ -586,9 +612,9 @@
                     </td>
                     <td><span class="badge badge-primary">${item.proxy}</span></td>
                     <td><span class="badge ${typeBadge}">${item.type}</span></td>
+                    <td>${detailText}</td>
                     <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
-                    <td>${item.reason}</td>
                     <td><button class="btn-action btn-approve" onclick="approveLeave(${item.id})">最終核准</button></td>
                 </tr>
             `;
@@ -605,7 +631,7 @@
                 updateLeaveDisplay();
             }
             localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-            alert(`單據已正式核准！${item.type === '特休' ? '特休已扣除 ' + item.hours + ' 小時' : (item.type === '出差' ? '已註記出差（免定位打卡）' : '')}`);
+            alert(`單據已正式核准！${item.type === '特休' ? '特休已扣除 ' + item.hours + ' 小時' : (item.type === '出差' ? '已註記出差（地點：' + item.location + '）' : '')}`);
             checkWeeklyAlerts();
             renderManagerLeaves();
         }
