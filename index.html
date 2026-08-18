@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v7</title>
+    <title>企業線上考勤打卡系統 v8</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
@@ -45,6 +45,10 @@
         input:readonly { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
         .btn-submit { background: #007bff; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         
+        /* 預警卡片 */
+        .alert-card { background: #fff3cd; border-left: 5px solid #ffc107; padding: 12px 15px; border-radius: 6px; margin-bottom: 15px; color: #856404; font-size: 0.9rem; }
+        .alert-card-danger { background: #f8d7da; border-left: 5px solid #dc3545; color: #721c24; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eef2f5; font-size: 0.85rem; }
         th { background: #f8f9fa; color: #6c757d; }
@@ -54,6 +58,7 @@
         .badge-primary { background: #cce5ff; color: #004085; }
         .badge-office { background: #e2e3e5; color: #383d41; }
         .badge-project { background: #fff3cd; color: #856404; }
+        .badge-trip { background: #d4edda; color: #155724; }
         
         .btn-action { color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
         .btn-proxy { background: #17a2b8; }
@@ -66,9 +71,9 @@
 <div class="container">
     <!-- 三視角切換器 -->
     <div class="role-switcher">
-        <button class="role-btn active" onclick="switchRole('employee')">1. 申請人視角 (打卡/請假)</button>
+        <button class="role-btn active" onclick="switchRole('employee')">1. 申請人視角 (打卡/請假/出差)</button>
         <button class="role-btn" onclick="switchRole('proxy')">2. 職務代理人視角 (確認)</button>
-        <button class="role-btn" onclick="switchRole('manager')">3. 主管/HR 視角 (核准/報表)</button>
+        <button class="role-btn" onclick="switchRole('manager')">3. 主管/HR 視角 (核准/預警通知)</button>
     </div>
 
     <!-- ================= 1. 申請人視角 ================= -->
@@ -87,6 +92,12 @@
         <div class="card clock-box">
             <div class="time-display" id="clock">00:00:00</div>
             <div class="date-display" id="date-str">載入中...</div>
+            
+            <!-- 出差狀態提示 -->
+            <div id="business-trip-status" style="display: none; background: #e2f0d9; border: 1px solid #c3e6cb; padding: 10px; border-radius: 8px; margin-bottom: 15px; color: #155724; font-weight: bold;">
+                ✈️ 今日已核准出差登記（免辦公室定位打卡，考勤自動計為正常出勤）
+            </div>
+
             <div class="clock-buttons">
                 <button class="btn-clock btn-clock-in" onclick="handleClock('上班')">上班打卡</button>
                 <button class="btn-clock btn-clock-out" onclick="handleClock('下班')">下班打卡</button>
@@ -94,22 +105,22 @@
             <div class="gps-status" id="gps-info">📍 點擊按鈕自動獲取 GPS 位置打卡</div>
         </div>
 
-        <!-- 線上請假申請 -->
+        <!-- 線上請假 / 出差申請 -->
         <div class="card">
-            <h2>線上請假申請</h2>
+            <h2>線上假單與出差申請</h2>
             
-            <label>請假模式</label>
+            <label>申請模式</label>
             <div class="mode-selector">
-                <div class="mode-option selected" id="mode-single" onclick="setLeaveMode('single')">📅 當日請假 (時數自訂)</div>
-                <div class="mode-option" id="mode-multi" onclick="setLeaveMode('multi')">🗓️ 跨日請假 (選擇區間)</div>
+                <div class="mode-option selected" id="mode-single" onclick="setLeaveMode('single')">📅 當日申請 (時數自訂)</div>
+                <div class="mode-option" id="mode-multi" onclick="setLeaveMode('multi')">🗓️ 跨日申請 (選擇區間)</div>
             </div>
 
             <form onsubmit="submitLeave(event)">
-                <!-- 辦公室與專案選擇 -->
+                <!-- 辦公室與動態專案選擇 -->
                 <div class="form-row form-group">
                     <div>
                         <label>申請人辦公室</label>
-                        <select id="leave-office" onchange="updateProxyList()" required>
+                        <select id="leave-office" onchange="updateProjectOptions()" required>
                             <option value="">-- 請選擇辦公室 --</option>
                             <option value="台北辦公室">台北辦公室</option>
                             <option value="台中辦公室">台中辦公室</option>
@@ -118,23 +129,18 @@
                     <div>
                         <label>所屬專案標籤</label>
                         <select id="leave-project" onchange="updateProxyList()" required>
-                            <option value="">-- 請選擇專案 --</option>
-                            <option value="強韌案">強韌案</option>
-                            <option value="T-CERT案">T-CERT案</option>
-                            <option value="協作案">協作案</option>
-                            <!-- 台中辦公室專屬案別 -->
-                            <option value="輻災案">輻災案 (台中)</option>
-                            <option value="水文化案">水文化案 (台中)</option>
-                            <option value="再造案">再造案 (台中)</option>
+                            <option value="">-- 請先選擇辦公室 --</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="form-row form-group">
                     <div>
-                        <label>假別</label>
+                        <label>假別 / 勤怠類別</label>
                         <select id="leave-type">
                             <option value="特休">特休</option>
+                            <option value="公假">公假</option>
+                            <option value="出差">出差 (免辦公室定位打卡)</option>
                             <option value="事假">事假</option>
                             <option value="病假">病假</option>
                         </select>
@@ -149,7 +155,7 @@
 
                 <!-- 單日模式：單一日期選擇 -->
                 <div class="form-group" id="single-date-box">
-                    <label>請假日期</label>
+                    <label>申請日期</label>
                     <input type="date" id="leave-single-date">
                 </div>
 
@@ -165,18 +171,18 @@
                     </div>
                 </div>
 
-                <!-- 請假時數 -->
+                <!-- 請假/出差時數 -->
                 <div class="form-group">
-                    <label id="hours-label">請假時數 (小時)</label>
-                    <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="請輸入請假小時數" required>
-                    <small id="hours-hint" style="color: #6c757d; font-size: 0.8rem; display: none;">🔒 跨日請假已依選取天數（每天 8 小時）自動算好並鎖定。</small>
+                    <label id="hours-label">申請時數 (小時)</label>
+                    <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="請輸入小時數" required>
+                    <small id="hours-hint" style="color: #6c757d; font-size: 0.8rem; display: none;">🔒 跨日申請已依選取天數（每天 8 小時）自動算好並鎖定。</small>
                 </div>
 
                 <div class="form-group">
-                    <label>請假事由 / 交辦事項</label>
-                    <textarea id="leave-reason" rows="2" placeholder="請註明請假事由及交付代理人的事項" required></textarea>
+                    <label>事由 / 地點 / 交辦事項</label>
+                    <textarea id="leave-reason" rows="2" placeholder="請註明申請事由、出差地點及交付代理人的事項" required></textarea>
                 </div>
-                <button type="submit" class="btn-submit">送出假單 (通知代理人)</button>
+                <button type="submit" class="btn-submit">送出申請 (通知代理人)</button>
             </form>
         </div>
     </div>
@@ -185,16 +191,16 @@
     <div id="proxy-view" style="display: none;">
         <div class="card">
             <h2>待確認的代理請求</h2>
-            <p style="color: #6c757d; font-size: 0.85rem; margin-bottom: 10px;">同仁指定你為代理人，請確認工作交辦事項後點擊同意，假單才會送交主管審核。</p>
+            <p style="color: #6c757d; font-size: 0.85rem; margin-bottom: 10px;">同仁指定你為代理人，請確認工作交辦事項後點擊同意，申請單才會送交主管審核。</p>
             <table>
                 <thead>
                     <tr>
                         <th>申請人</th>
                         <th>辦公室 / 專案</th>
-                        <th>假別</th>
+                        <th>假別/勤怠</th>
                         <th>日期 / 區間</th>
                         <th>時數</th>
-                        <th>交辦事項</th>
+                        <th>事由/地點</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -205,15 +211,19 @@
 
     <!-- ================= 3. 主管/HR 視角 ================= -->
     <div id="manager-view" style="display: none;">
+        
+        <!-- 週預警通知區塊 -->
+        <div id="weekly-alert-container"></div>
+
         <div class="card">
-            <h2>待審核假單 (代理人已同意)</h2>
+            <h2>待審核假單與出差單 (代理人已同意)</h2>
             <table>
                 <thead>
                     <tr>
                         <th>申請人</th>
                         <th>辦公室 / 專案</th>
                         <th>代理人</th>
-                        <th>假別</th>
+                        <th>假別/勤怠</th>
                         <th>日期 / 區間</th>
                         <th>時數</th>
                         <th>事由</th>
@@ -225,15 +235,21 @@
         </div>
 
         <div class="card">
-            <h2>月底考勤報表管理</h2>
-            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動匯出含代理人資訊與打卡時數的 Excel 表格。</p>
+            <h2>月底考勤與出差報表管理</h2>
+            <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 15px;">自動匯出含公假、出差註記、代理人資訊與打卡時數的 Excel 表格。</p>
             <button class="btn-submit" style="background: #28a745;" onclick="exportExcel()">下載本月 Excel 考勤報表 📊</button>
         </div>
     </div>
 </div>
 
 <script>
-    // 預設同仁資料庫 (包含台北與台中專案)
+    // 專案配置表
+    const officeProjects = {
+        "台北辦公室": ["強韌案", "T-CERT案", "協作案"],
+        "台中辦公室": ["強韌案", "T-CERT案", "協作案", "輻災案", "水文化案", "再造案"]
+    };
+
+    // 預設同仁資料庫
     const staffDatabase = [
         { name: "李大同", office: "台北辦公室", project: "T-CERT案" },
         { name: "王美玲", office: "台北辦公室", project: "強韌案" },
@@ -248,11 +264,19 @@
 
     let currentLeaveMode = 'single';
     let annualLeaveHours = parseFloat(localStorage.getItem('annualLeaveHours')) || 60;
+    
+    // 預設打卡記錄 (包含加班範例)
     let attendanceLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [
-        { name: "張小明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "18:05:22", status: "正常", location: "台北市信義區" }
+        { name: "張小明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "21:05:22", status: "正常", overtimeHours: 3, location: "台北市信義區" },
+        { name: "張小明", date: "2026-08-18", clockIn: "08:50:00", clockOut: "22:15:00", status: "正常", overtimeHours: 4, location: "台北市信義區" },
+        { name: "張小明", date: "2026-08-19", clockIn: "08:55:00", clockOut: "22:30:00", status: "正常", overtimeHours: 4, location: "台北市信義區" }
     ];
+
+    // 預設假單記錄 (包含出差、公假範例)
     let leaveRequests = JSON.parse(localStorage.getItem('leaveRequests')) || [
-        { id: 1, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "特休", dateStr: "2026-08-20", hours: 4, reason: "下午專案請假", status: "待代理人確認" }
+        { id: 1, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "出差", dateStr: "2026-08-20", hours: 8, reason: "前往台中辦公室現場輔導訪視", status: "已核准" },
+        { id: 2, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "特休", dateStr: "2026-08-21", hours: 8, reason: "個人事宜", status: "已核准" },
+        { id: 3, name: "張小明", office: "台北辦公室", project: "T-CERT案", proxy: "李大同 (台北辦公室 / T-CERT案)", type: "公假", dateStr: "2026-08-24", hours: 8, reason: "參加消防署防災共識營", status: "待代理人確認" }
     ];
 
     function updateLeaveDisplay() {
@@ -262,11 +286,40 @@
 
     function updateClock() {
         const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
         document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
         document.getElementById('date-str').innerText = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 (固定班)`;
+
+        // 檢查今日是否有出差核准紀錄
+        const hasTrip = leaveRequests.some(r => r.name === "張小明" && r.type === "出差" && r.status === "已核准" && r.dateStr.includes(dateStr));
+        const tripBanner = document.getElementById('business-trip-status');
+        if (tripBanner) {
+            tripBanner.style.display = hasTrip ? 'block' : 'none';
+        }
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    // 辦公室切換時連動專案選單
+    function updateProjectOptions() {
+        const office = document.getElementById('leave-office').value;
+        const projectSelect = document.getElementById('leave-project');
+        projectSelect.innerHTML = '';
+
+        if (!office) {
+            projectSelect.innerHTML = '<option value="">-- 請先選擇辦公室 --</option>';
+            updateProxyList();
+            return;
+        }
+
+        projectSelect.innerHTML = '<option value="">-- 請選擇專案 --</option>';
+        const availableProjects = officeProjects[office] || [];
+        availableProjects.forEach(proj => {
+            projectSelect.innerHTML += `<option value="${proj}">${proj}</option>`;
+        });
+
+        updateProxyList();
+    }
 
     // 動態更新職務代理人選項
     function updateProxyList() {
@@ -281,7 +334,6 @@
             return;
         }
 
-        // 過濾同辦公室且同專案的代理人
         const filteredStaff = staffDatabase.filter(s => s.office === office && s.project === project);
 
         if (filteredStaff.length === 0) {
@@ -311,7 +363,7 @@
             
             hoursInput.readOnly = false;
             hoursInput.value = '';
-            hoursInput.placeholder = "請輸入請假小時數 (例如 2 或 4)";
+            hoursInput.placeholder = "請輸入小時數 (例如 2 或 4)";
             hoursHint.style.display = 'none';
         } else {
             multiBtn.classList.add('selected');
@@ -367,6 +419,7 @@
         } else {
             document.querySelectorAll('.role-btn')[2].classList.add('active');
             document.getElementById('manager-view').style.display = 'block';
+            checkWeeklyAlerts();
             renderManagerLeaves();
         }
     }
@@ -380,11 +433,11 @@
         if (type === '上班') {
             const isLate = (now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0));
             if (todayRecord) { todayRecord.clockIn = timeStr; } 
-            else { attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: timeStr, clockOut: "--:--:--", status: isLate ? "遲到" : "正常", location: "公司範圍" }); }
+            else { attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: timeStr, clockOut: "--:--:--", status: isLate ? "遲到" : "正常", overtimeHours: 0, location: "公司範圍" }); }
             alert(`✅ 上班打卡成功！時間：${timeStr}`);
         } else {
             if (todayRecord) { todayRecord.clockOut = timeStr; } 
-            else { attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: "--:--:--", clockOut: timeStr, status: "未打上班卡", location: "公司範圍" }); }
+            else { attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: "--:--:--", clockOut: timeStr, status: "未打上班卡", overtimeHours: 0, location: "公司範圍" }); }
             alert(`✅ 下班打卡成功！時間：${timeStr}`);
         }
         localStorage.setItem('attendanceLogs', JSON.stringify(attendanceLogs));
@@ -402,17 +455,17 @@
 
         if (currentLeaveMode === 'single') {
             const singleDate = document.getElementById('leave-single-date').value;
-            if (!singleDate) { alert("請選擇請假日期！"); return; }
+            if (!singleDate) { alert("請選擇申請日期！"); return; }
             dateStr = singleDate;
         } else {
             const startVal = document.getElementById('leave-start-date').value;
             const endVal = document.getElementById('leave-end-date').value;
-            if (!startVal || !endVal) { alert("請選擇請假的起訖日期！"); return; }
+            if (!startVal || !endVal) { alert("請選擇申請的起訖日期！"); return; }
             dateStr = startVal === endVal ? startVal : `${startVal} 至 ${endVal}`;
         }
 
         if (type === '特休' && hours > annualLeaveHours) {
-            alert(`請假失敗！剩餘特休時數不足（目前僅剩 ${annualLeaveHours} 小時）`);
+            alert(`申請失敗！剩餘特休時數不足（目前僅剩 ${annualLeaveHours} 小時）`);
             return;
         }
 
@@ -430,9 +483,9 @@
         });
 
         localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-        alert('假單已送出！系統已通知職務代理人進行確認。');
+        alert('單據已送出！系統已通知職務代理人進行確認。');
         e.target.reset();
-        updateProxyList();
+        updateProjectOptions();
         if (currentLeaveMode === 'single') setLeaveMode('single');
     }
 
@@ -442,11 +495,12 @@
         const list = leaveRequests.filter(item => item.status === "待代理人確認");
 
         if(list.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#999;">目前沒有需要您確認代理的假單</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#999;">目前沒有需要您確認代理的單據</td></tr>';
             return;
         }
 
         list.forEach(item => {
+            const typeBadge = item.type === '出差' ? 'badge-trip' : 'badge-info';
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
@@ -454,7 +508,7 @@
                         <span class="badge badge-office">${item.office || '未設置'}</span>
                         <span class="badge badge-project">${item.project || '未設置'}</span>
                     </td>
-                    <td><span class="badge badge-info">${item.type}</span></td>
+                    <td><span class="badge ${typeBadge}">${item.type}</span></td>
                     <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
                     <td>${item.reason}</td>
@@ -469,8 +523,45 @@
         if (item) {
             item.status = "待主管審核";
             localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-            alert('已同意代理！假單已轉交至主管進行最終審核。');
+            alert('已同意代理！單據已轉交至主管進行最終審核。');
             renderProxyLeaves();
+        }
+    }
+
+    function checkWeeklyAlerts() {
+        const alertContainer = document.getElementById('weekly-alert-container');
+        alertContainer.innerHTML = '';
+
+        // 計算每週請假時數與加班時數 (以張小明為範例)
+        let totalLeaveHours = 0;
+        let totalOvertimeHours = 0;
+
+        leaveRequests.filter(r => r.name === "張小明" && (r.status === "已核准" || r.status === "待主管審核") && r.type !== "出差").forEach(r => {
+            totalLeaveHours += r.hours;
+        });
+
+        attendanceLogs.filter(a => a.name === "張小明").forEach(a => {
+            totalOvertimeHours += (a.overtimeHours || 0);
+        });
+
+        const leaveDays = totalLeaveHours / 8;
+
+        // 預警條件：每週請假超過 3 天 (24小時)
+        if (leaveDays > 3) {
+            alertContainer.innerHTML += `
+                <div class="alert-card alert-card-danger">
+                    ⚠️ <strong>異常請假預警：</strong> 同仁 <strong>張小明</strong> 本週累計請假已達 <strong>${leaveDays} 天 (${totalLeaveHours} 小時)</strong>，已超過每週 3 天上限，請主管特別留意關懷。
+                </div>
+            `;
+        }
+
+        // 預警條件：每週加班超過 10 小時
+        if (totalOvertimeHours > 10) {
+            alertContainer.innerHTML += `
+                <div class="alert-card">
+                    🚨 <strong>加班過長預警：</strong> 同仁 <strong>張小明</strong> 本週累計加班時數已達 <strong>${totalOvertimeHours} 小時</strong>，已超過每週 10 小時預警標準，請協助適度調整工作負擔。
+                </div>
+            `;
         }
     }
 
@@ -480,11 +571,12 @@
         const list = leaveRequests.filter(item => item.status === "待主管審核");
 
         if(list.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">目前沒有待審核假單 (需經代理人同意後才會顯示於此)</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#999;">目前沒有待審核單據 (需經代理人同意後才會顯示於此)</td></tr>';
             return;
         }
 
         list.forEach(item => {
+            const typeBadge = item.type === '出差' ? 'badge-trip' : 'badge-info';
             tbody.innerHTML += `
                 <tr>
                     <td>${item.name}</td>
@@ -493,7 +585,7 @@
                         <span class="badge badge-project">${item.project || '未設置'}</span>
                     </td>
                     <td><span class="badge badge-primary">${item.proxy}</span></td>
-                    <td><span class="badge badge-info">${item.type}</span></td>
+                    <td><span class="badge ${typeBadge}">${item.type}</span></td>
                     <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
                     <td>${item.reason}</td>
@@ -513,7 +605,8 @@
                 updateLeaveDisplay();
             }
             localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-            alert(`假單已正式核准！${item.type === '特休' ? '特休已自動扣除 ' + item.hours + ' 小時' : ''}`);
+            alert(`單據已正式核准！${item.type === '特休' ? '特休已扣除 ' + item.hours + ' 小時' : (item.type === '出差' ? '已註記出差（免定位打卡）' : '')}`);
+            checkWeeklyAlerts();
             renderManagerLeaves();
         }
     }
@@ -524,13 +617,14 @@
             "打卡日期": item.date,
             "上班打卡": item.clockIn,
             "下班打卡": item.clockOut,
+            "加班時數": item.overtimeHours || 0,
             "出勤狀態": item.status,
             "定位資訊": item.location
         }));
         const worksheet = XLSX.utils.json_to_sheet(data);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "考勤統計");
-        XLSX.writeFile(workbook, `考勤月報表_${new Date().toISOString().split('T')[0]}.xlsx`);
+        XLSX.writeFile(workbook, `考勤與勤怠報表_${new Date().toISOString().split('T')[0]}.xlsx`);
     }
 </script>
 
