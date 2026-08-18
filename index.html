@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企業線上考勤打卡系統 v3</title>
+    <title>企業線上考勤打卡系統 v4</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: #f4f6f9; color: #333; padding: 20px; }
@@ -31,10 +31,18 @@
         .btn-clock:active { transform: scale(0.95); }
         .gps-status { margin-top: 15px; font-size: 0.9rem; color: #17a2b8; }
 
+        /* 單日/跨日切換頁籤 */
+        .mode-selector { display: flex; gap: 10px; margin-bottom: 15px; }
+        .mode-option { flex: 1; text-align: center; padding: 8px; border: 1px solid #ced4da; border-radius: 6px; cursor: pointer; background: #f8f9fa; font-weight: 500; }
+        .mode-option.selected { background: #e7f1ff; border-color: #007bff; color: #007bff; font-weight: bold; }
+
         /* 表單與表格 */
         .form-group { margin-bottom: 15px; }
+        .date-range-group { display: flex; gap: 10px; }
+        .date-range-group > div { flex: 1; }
         label { display: block; margin-bottom: 5px; font-weight: 500; }
         input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; }
+        input:readonly { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
         .btn-submit { background: #007bff; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
@@ -42,10 +50,8 @@
         th { background: #f8f9fa; color: #6c757d; }
         
         .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: bold; }
-        .badge-warning { background: #fff3cd; color: #856404; }
         .badge-info { background: #d1ecf1; color: #0c5460; }
         .badge-primary { background: #cce5ff; color: #004085; }
-        .badge-success { background: #d4edda; color: #155724; }
         
         .btn-action { color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.8rem; }
         .btn-proxy { background: #17a2b8; }
@@ -86,9 +92,17 @@
             <div class="gps-status" id="gps-info">📍 點擊按鈕自動獲取 GPS 位置打卡</div>
         </div>
 
-        <!-- 線上請假申請 (含代理人與小時單位) -->
+        <!-- 線上請假申請 (支援單日自訂時數與跨日天數自動計算) -->
         <div class="card">
             <h2>線上請假申請</h2>
+            
+            <!-- 請假類型選擇器 -->
+            <label>請假模式</label>
+            <div class="mode-selector">
+                <div class="mode-option selected" id="mode-single" onclick="setLeaveMode('single')">📅 當日請假 (時數自訂)</div>
+                <div class="mode-option" id="mode-multi" onclick="setLeaveMode('multi')">🗓️ 跨日請假 (選擇區間)</div>
+            </div>
+
             <form onsubmit="submitLeave(event)">
                 <div class="form-group">
                     <label>假別</label>
@@ -98,6 +112,7 @@
                         <option value="病假">病假</option>
                     </select>
                 </div>
+
                 <div class="form-group">
                     <label>職務代理人</label>
                     <select id="leave-proxy" required>
@@ -107,16 +122,34 @@
                         <option value="陳立威 (專案部)">陳立威 (專案部)</option>
                     </select>
                 </div>
-                <div class="form-group">
+
+                <!-- 單日模式：單一日期選擇 -->
+                <div class="form-group" id="single-date-box">
                     <label>請假日期</label>
-                    <input type="date" id="leave-date" required>
+                    <input type="date" id="leave-single-date">
                 </div>
-                <div class="form-group">
-                    <label>請假時數 (小時)</label>
-                    <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="例如: 2 或 4" required>
+
+                <!-- 跨日模式：日期區間選擇 -->
+                <div class="form-group date-range-group" id="multi-date-box" style="display: none;">
+                    <div>
+                        <label>開始日期</label>
+                        <input type="date" id="leave-start-date" onchange="calculateMultiDays()">
+                    </div>
+                    <div>
+                        <label>結束日期</label>
+                        <input type="date" id="leave-end-date" onchange="calculateMultiDays()">
+                    </div>
                 </div>
+
+                <!-- 請假時數：動態調整輸入與自動鎖定狀態 -->
                 <div class="form-group">
-                    <label>請假事由 / 交辦工作</label>
+                    <label id="hours-label">請假時數 (小時)</label>
+                    <input type="number" id="leave-hours" step="0.5" min="0.5" placeholder="請輸入請假小時數" required>
+                    <small id="hours-hint" style="color: #6c757d; font-size: 0.8rem; display: none;">🔒 跨日請假已依選取天數（每天 8 小時）自動算好並鎖定。</small>
+                </div>
+
+                <div class="form-group">
+                    <label>請假事由 / 交辦事項</label>
                     <textarea id="leave-reason" rows="2" placeholder="請註明請假事由及交付代理人的事項" required></textarea>
                 </div>
                 <button type="submit" class="btn-submit">送出假單 (通知代理人)</button>
@@ -134,7 +167,7 @@
                     <tr>
                         <th>申請人</th>
                         <th>假別</th>
-                        <th>日期</th>
+                        <th>日期 / 區間</th>
                         <th>時數</th>
                         <th>交辦事項</th>
                         <th>操作</th>
@@ -155,7 +188,7 @@
                         <th>申請人</th>
                         <th>代理人</th>
                         <th>假別</th>
-                        <th>日期</th>
+                        <th>日期 / 區間</th>
                         <th>時數</th>
                         <th>事由</th>
                         <th>操作</th>
@@ -174,13 +207,13 @@
 </div>
 
 <script>
-    // 初始化特休時數 (原 7.5 天 = 60 小時)
+    let currentLeaveMode = 'single'; // 預設單日模式
     let annualLeaveHours = parseFloat(localStorage.getItem('annualLeaveHours')) || 60;
     let attendanceLogs = JSON.parse(localStorage.getItem('attendanceLogs')) || [
         { name: "張小明", date: "2026-08-17", clockIn: "08:52:10", clockOut: "18:05:22", status: "正常", location: "台北市信義區" }
     ];
     let leaveRequests = JSON.parse(localStorage.getItem('leaveRequests')) || [
-        { id: 1, name: "張小明", proxy: "李大同 (工程部)", type: "特休", date: "2026-08-20", hours: 4, reason: "下午專案請假", status: "待代理人確認" }
+        { id: 1, name: "張小明", proxy: "李大同 (工程部)", type: "特休", dateStr: "2026-08-20", hours: 4, reason: "下午專案請假", status: "待代理人確認" }
     ];
 
     function updateLeaveDisplay() {
@@ -195,6 +228,70 @@
     }
     setInterval(updateClock, 1000);
     updateClock();
+
+    // 切換 單日 / 跨日 請假模式
+    function setLeaveMode(mode) {
+        currentLeaveMode = mode;
+        const singleBtn = document.getElementById('mode-single');
+        const multiBtn = document.getElementById('mode-multi');
+        const singleBox = document.getElementById('single-date-box');
+        const multiBox = document.getElementById('multi-date-box');
+        const hoursInput = document.getElementById('leave-hours');
+        const hoursHint = document.getElementById('hours-hint');
+
+        if (mode === 'single') {
+            singleBtn.classList.add('selected');
+            multiBtn.classList.remove('selected');
+            singleBox.style.display = 'block';
+            multiBox.style.display = 'none';
+            
+            // 解鎖小時輸入框
+            hoursInput.readOnly = false;
+            hoursInput.value = '';
+            hoursInput.placeholder = "請輸入請假小時數 (例如 2 或 4)";
+            hoursHint.style.display = 'none';
+        } else {
+            multiBtn.classList.add('selected');
+            singleBtn.classList.remove('selected');
+            singleBox.style.display = 'none';
+            multiBox.style.display = 'flex';
+            
+            // 鎖定小時輸入框
+            hoursInput.readOnly = true;
+            hoursInput.placeholder = "選擇起訖日期後自動計算";
+            hoursHint.style.display = 'block';
+            calculateMultiDays();
+        }
+    }
+
+    // 計算跨日天數與時數 (天數 x 8小時)
+    function calculateMultiDays() {
+        if (currentLeaveMode !== 'multi') return;
+        const startVal = document.getElementById('leave-start-date').value;
+        const endVal = document.getElementById('leave-end-date').value;
+        const hoursInput = document.getElementById('leave-hours');
+
+        if (startVal && endVal) {
+            const startDate = new Date(startVal);
+            const endDate = new Date(endVal);
+
+            if (endDate < startDate) {
+                alert("結束日期不能早於開始日期！");
+                document.getElementById('leave-end-date').value = '';
+                hoursInput.value = '';
+                return;
+            }
+
+            // 計算天數 (包含頭尾天)
+            const diffTime = Math.abs(endDate - startDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            const calculatedHours = diffDays * 8; // 一天 8 小時
+
+            hoursInput.value = calculatedHours;
+        } else {
+            hoursInput.value = '';
+        }
+    }
 
     function switchRole(role) {
         document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
@@ -225,11 +322,8 @@
 
         if (type === '上班') {
             const isLate = (now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 0));
-            if (todayRecord) {
-                todayRecord.clockIn = timeStr;
-            } else {
-                attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: timeStr, clockOut: "--:--:--", status: isLate ? "遲到" : "正常", location: "公司範圍" });
-            }
+            if (todayRecord) { todayRecord.clockIn = timeStr; } 
+            else { attendanceLogs.push({ name: "張小明", date: dateStr, clockIn: timeStr, clockOut: "--:--:--", status: isLate ? "遲到" : "正常", location: "公司範圍" }); }
             alert(`✅ 上班打卡成功！時間：${timeStr}`);
         } else {
             if (todayRecord) { todayRecord.clockOut = timeStr; } 
@@ -239,14 +333,25 @@
         localStorage.setItem('attendanceLogs', JSON.stringify(attendanceLogs));
     }
 
-    // 提交請假 (設為 待代理人確認)
+    // 提交請假
     function submitLeave(e) {
         e.preventDefault();
         const type = document.getElementById('leave-type').value;
         const proxy = document.getElementById('leave-proxy').value;
-        const date = document.getElementById('leave-date').value;
         const hours = parseFloat(document.getElementById('leave-hours').value);
         const reason = document.getElementById('leave-reason').value;
+        let dateStr = "";
+
+        if (currentLeaveMode === 'single') {
+            const singleDate = document.getElementById('leave-single-date').value;
+            if (!singleDate) { alert("請選擇請假日期！"); return; }
+            dateStr = singleDate;
+        } else {
+            const startVal = document.getElementById('leave-start-date').value;
+            const endVal = document.getElementById('leave-end-date').value;
+            if (!startVal || !endVal) { alert("請選擇請假的起訖日期！"); return; }
+            dateStr = startVal === endVal ? startVal : `${startVal} 至 ${endVal}`;
+        }
 
         if (type === '特休' && hours > annualLeaveHours) {
             alert(`請假失敗！剩餘特休時數不足（目前僅剩 ${annualLeaveHours} 小時）`);
@@ -258,15 +363,16 @@
             name: "張小明",
             proxy: proxy,
             type: type,
-            date: date,
+            dateStr: dateStr,
             hours: hours,
             reason: reason,
             status: "待代理人確認"
         });
 
         localStorage.setItem('leaveRequests', JSON.stringify(leaveRequests));
-        alert('假單已送出！系統已通知職務代理人進行同意確認。');
+        alert('假單已送出！系統已通知職務代理人進行確認。');
         e.target.reset();
+        if (currentLeaveMode === 'single') setLeaveMode('single');
     }
 
     // 代理人畫面渲染
@@ -285,7 +391,7 @@
                 <tr>
                     <td>${item.name}</td>
                     <td><span class="badge badge-info">${item.type}</span></td>
-                    <td>${item.date}</td>
+                    <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
                     <td>${item.reason}</td>
                     <td><button class="btn-action btn-proxy" onclick="proxyAgree(${item.id})">同意擔任代理人</button></td>
@@ -294,7 +400,6 @@
         });
     }
 
-    // 代理人點擊同意 ➔ 狀態改為 待主管審核
     function proxyAgree(id) {
         const item = leaveRequests.find(r => r.id === id);
         if (item) {
@@ -305,7 +410,7 @@
         }
     }
 
-    // 主管畫面渲染 (只顯示代理人已同意的單)
+    // 主管畫面渲染
     function renderManagerLeaves() {
         const tbody = document.getElementById('pending-leave-list');
         tbody.innerHTML = '';
@@ -322,7 +427,7 @@
                     <td>${item.name}</td>
                     <td><span class="badge badge-primary">${item.proxy}</span></td>
                     <td><span class="badge badge-info">${item.type}</span></td>
-                    <td>${item.date}</td>
+                    <td>${item.dateStr}</td>
                     <td><b>${item.hours}</b> 小時</td>
                     <td>${item.reason}</td>
                     <td><button class="btn-action btn-approve" onclick="approveLeave(${item.id})">最終核准</button></td>
@@ -331,7 +436,6 @@
         });
     }
 
-    // 主管核准 ➔ 自動扣除特休時數
     function approveLeave(id) {
         const item = leaveRequests.find(r => r.id === id);
         if (item) {
